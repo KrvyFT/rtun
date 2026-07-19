@@ -1,5 +1,7 @@
 use std::net::Ipv4Addr;
 
+use super::protocol::Checksum;
+
 pub enum ICMPType {
     EchoReply = 0,              // Ping 回应
     DestinationUnreachable = 3, // 目标不可达
@@ -29,6 +31,8 @@ pub struct ICMPPacket<'a> {
     raw_data: &'a [u8],
 }
 
+impl<'a> Checksum for ICMPPacket<'a> {}
+
 impl<'a> ICMPPacket<'a> {
     pub fn new(slice: &'a [u8]) -> Self {
         Self { raw_data: slice }
@@ -52,45 +56,6 @@ impl<'a> ICMPPacket<'a> {
         &self.raw_data[4..]
     }
 
-    pub fn build_icmp_reply(&self, src_ip: Ipv4Addr, dest_ip: Ipv4Addr) -> Vec<u8> {
-        let icmp_reply_data = Self::build_reply(self.raw_data);
-
-        // IPv4 头部 20 字节 + 完整 ICMP 长度
-        let total_len = 20 + icmp_reply_data.len();
-        let mut packet = vec![0u8; total_len];
-
-        // 写入版本号 (4) 和头部长度 (5, 代表 5 个 32位字 = 20字节)
-        packet[0] = 0x45;
-
-        // 写入总长度 (Total Length)，大端序网络字节序
-        let total_len_bytes = (total_len as u16).to_be_bytes();
-        packet[2] = total_len_bytes[0];
-        packet[3] = total_len_bytes[1];
-
-        // 写入生存时间 (TTL = 64)
-        packet[8] = 64;
-
-        // 写入协议类型 (Protocol = 1 代表 ICMP)
-        packet[9] = 1;
-
-        // 写入源 IP 地址 (4字节)
-        packet[12..16].copy_from_slice(&src_ip.octets());
-
-        // 写入目的 IP 地址 (4字节)
-        packet[16..20].copy_from_slice(&dest_ip.octets());
-
-        // 计算并写入 IP 头部的校验和（只校验前20字节）
-        let ip_csum = ICMPPacket::calc_checksum(&packet[0..20]);
-        let ip_csum_bytes = ip_csum.to_be_bytes();
-        packet[10] = ip_csum_bytes[0];
-        packet[11] = ip_csum_bytes[1];
-
-        // 把信件内容（ICMP 载荷）紧跟在 20 字节头部后面塞进去
-        packet[20..].copy_from_slice(&icmp_reply_data);
-
-        packet
-    }
-
     /// 构建回复
     pub fn build_reply(request_data: &[u8]) -> Vec<u8> {
         let mut reply = request_data.to_vec();
@@ -106,28 +71,5 @@ impl<'a> ICMPPacket<'a> {
         reply[2] = csum_bytes[0];
         reply[3] = csum_bytes[1];
         reply
-    }
-
-    /// 计算校验和
-    pub fn calc_checksum(data: &[u8]) -> u16 {
-        let mut sum = 0u32;
-        let mut i = 0;
-
-        while i < data.len() - 1 {
-            let word = ((data[i] as u32) << 8) | (data[i + 1] as u32);
-            sum += word;
-            i += 2;
-        }
-
-        if i < data.len() {
-            let word = (data[i] as u32) << 8;
-            sum += word;
-        }
-
-        while (sum >> 16) > 0 {
-            sum = (sum & 0xffff) + (sum >> 16);
-        }
-
-        !(sum as u16)
     }
 }
