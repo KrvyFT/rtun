@@ -5,6 +5,7 @@ use crate::{
         icmp_packet::{ICMPPacket, ICMPType},
         ip_packet::IPV4Packet,
         protocol::Protocol,
+        udp_packet::UdpPacket,
     },
     tun_device::TUNDevice,
 };
@@ -38,14 +39,40 @@ fn main() -> io::Result<()> {
 
                 match icmp_packet.get_type() {
                     ICMPType::EchoRequest => {
-                        let reply = icmp_packet.build_icmp_reply(
-                            ip_packet.get_destination_ip(), // 回复的源 IP 是原来的目的 IP
-                            ip_packet.get_source_ip(),      // 回复的目的 IP 是原来的源 IP
+                        let reply = ICMPPacket::build_reply(ip_packet.payload());
+
+                        let final_packet = IPV4Packet::build_ipv4_packet(
+                            ip_packet.get_destination_ip(), // 新源 IP
+                            ip_packet.get_source_ip(),      // 新目的 IP
+                            Protocol::ICMP,                 // 协议类型
+                            &reply, // 刚做好的 ICMP 响应包作为 IP 的 payload
                         );
-                        tun.write(&reply)?;
+
+                        tun.write(&final_packet)?;
                     }
                     _ => {}
                 }
+            }
+            Protocol::UDP => {
+                let udp_packet = UdpPacket::new(ip_packet.payload());
+
+                let udp_reply = UdpPacket::build_udp_packet(
+                    ip_packet.get_destination_ip(),
+                    ip_packet.get_source_ip(),
+                    udp_packet.get_destination_port(),
+                    udp_packet.get_source_port(),
+                    udp_packet.payload(),
+                );
+
+                let final_packet = IPV4Packet::build_ipv4_packet(
+                    ip_packet.get_destination_ip(), // 新源 IP
+                    ip_packet.get_source_ip(),      // 新目的 IP
+                    Protocol::UDP,                  // 协议类型
+                    &udp_reply,                     // 刚做好的 UDP 响应包作为 IP 的 payload
+                );
+
+                // 🔥 修复点：一定要把拼装好的 IP 层数据包写回网卡，否则内核收不到响应
+                tun.write(&final_packet)?;
             }
             Protocol::Unknown => todo!(),
         }
