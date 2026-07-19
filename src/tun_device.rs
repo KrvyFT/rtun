@@ -55,9 +55,4 @@ impl TUNDevice {
             Err(e) => Err(e),
         }
     }
-
-    /// 关闭虚拟网卡
-    pub fn down(self) {
-        drop(self);
-    }
 }
