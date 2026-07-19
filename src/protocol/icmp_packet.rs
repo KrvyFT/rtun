@@ -1,5 +1,3 @@
-use std::net::Ipv4Addr;
-
 use super::protocol::Checksum;
 
 pub enum ICMPType {

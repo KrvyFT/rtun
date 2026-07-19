@@ -33,7 +33,7 @@ impl<'a> UdpPacket<'a> {
         &self.raw_data[8..]
     }
 
-    pub fn build_udp_packet(
+    pub fn build_reply(
         src_addr: Ipv4Addr,
         dst_addr: Ipv4Addr,
         src_port: u16,
