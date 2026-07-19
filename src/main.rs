@@ -13,13 +13,14 @@ use crate::{
 mod protocol;
 mod tun_device;
 
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let mut tun = TUNDevice::new().expect("Failed to create TUN device");
     println!("TUN device created successfully");
 
     let mut buf = [0u8; 1500];
     loop {
-        let bytes_read = tun.read(&mut buf)?;
+        let bytes_read = tun.read(&mut buf).await?;
         let raw_packet = &buf[..bytes_read];
 
         if raw_packet.is_empty() {
@@ -48,7 +49,7 @@ fn main() -> io::Result<()> {
                             &reply, // 刚做好的 ICMP 响应包作为 IP 的 payload
                         );
 
-                        tun.write(&final_packet)?;
+                        tun.write(&final_packet).await?;
                     }
                     _ => {}
                 }
@@ -56,7 +57,7 @@ fn main() -> io::Result<()> {
             Protocol::UDP => {
                 let udp_packet = UdpPacket::new(ip_packet.payload());
 
-                let udp_reply = UdpPacket::build_udp_packet(
+                let udp_reply = UdpPacket::build_reply(
                     ip_packet.get_destination_ip(),
                     ip_packet.get_source_ip(),
                     udp_packet.get_destination_port(),
@@ -72,7 +73,7 @@ fn main() -> io::Result<()> {
                 );
 
                 // 🔥 修复点：一定要把拼装好的 IP 层数据包写回网卡，否则内核收不到响应
-                tun.write(&final_packet)?;
+                tun.write(&final_packet).await?;
             }
             Protocol::Unknown => todo!(),
         }

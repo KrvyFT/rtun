@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 libc = "0.2"
+tokio = { version = "1.53.0", features = ["full"] }
