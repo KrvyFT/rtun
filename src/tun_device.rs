@@ -51,7 +51,7 @@ impl TUNDevice {
     }
 
     /// 从网卡里读取操作系统发过来的原始 IP 数据包
-    pub async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    pub async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             let mut guard = self.async_fd.readable().await?;
             match guard.try_io(|inner| {
@@ -72,7 +72,7 @@ impl TUNDevice {
     }
 
     /// 往网卡里写入原始 IP 数据包，让操作系统处理
-    pub async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    pub async fn write(&self, buf: &[u8]) -> io::Result<usize> {
         loop {
             let mut guard = self.async_fd.writable().await?;
             match guard.try_io(|inner| {

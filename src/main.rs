@@ -1,4 +1,6 @@
-use std::io;
+use std::{io, sync::Arc};
+
+use tokio::sync::mpsc;
 
 use crate::{
     protocol::{
@@ -15,14 +17,23 @@ mod tun_device;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let mut tun = TUNDevice::new().expect("Failed to create TUN device");
+    let tun = Arc::new(TUNDevice::new().expect("Failed to create TUN device"));
     println!("TUN device created successfully");
+
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
+    let tun_writer = Arc::clone(&tun);
+    tokio::spawn(async move {
+        while let Some(packet_to_write) = rx.recv().await {
+            if let Err(e) = tun_writer.write(&packet_to_write).await {
+                eprintln!("write error: {:?}", e);
+            }
+        }
+    });
 
     let mut buf = [0u8; 1500];
     loop {
         let bytes_read = tun.read(&mut buf).await?;
-        let raw_packet = &buf[..bytes_read];
-
+        let raw_packet = buf[..bytes_read].to_vec();
         if raw_packet.is_empty() {
             continue;
         }
@@ -32,50 +43,47 @@ async fn main() -> io::Result<()> {
             continue;
         }
 
-        let ip_packet = IPV4Packet::new(&raw_packet);
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            let ip_packet = IPV4Packet::new(&raw_packet);
 
-        match ip_packet.protocol() {
-            Protocol::ICMP => {
-                let icmp_packet = ICMPPacket::new(ip_packet.payload());
+            match ip_packet.protocol() {
+                Protocol::ICMP => {
+                    let icmp_packet = ICMPPacket::new(ip_packet.payload());
 
-                match icmp_packet.get_type() {
-                    ICMPType::EchoRequest => {
-                        let reply = ICMPPacket::build_reply(ip_packet.payload());
-
-                        let final_packet = IPV4Packet::build_ipv4_packet(
-                            ip_packet.get_destination_ip(), // 新源 IP
-                            ip_packet.get_source_ip(),      // 新目的 IP
-                            Protocol::ICMP,                 // 协议类型
-                            &reply, // 刚做好的 ICMP 响应包作为 IP 的 payload
-                        );
-
-                        tun.write(&final_packet).await?;
+                    match icmp_packet.get_type() {
+                        ICMPType::EchoRequest => {
+                            let reply = ICMPPacket::build_reply(ip_packet.payload());
+                            let final_packet = IPV4Packet::build_ipv4_packet(
+                                ip_packet.get_destination_ip(),
+                                ip_packet.get_source_ip(),
+                                Protocol::ICMP,
+                                &reply,
+                            );
+                            let _ = tx_clone.send(final_packet).await;
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                Protocol::UDP => {
+                    let udp_packet = UdpPacket::new(ip_packet.payload());
+                    let udp_reply = UdpPacket::build_reply(
+                        ip_packet.get_destination_ip(),
+                        ip_packet.get_source_ip(),
+                        udp_packet.get_destination_port(),
+                        udp_packet.get_source_port(),
+                        udp_packet.payload(),
+                    );
+                    let final_packet = IPV4Packet::build_ipv4_packet(
+                        ip_packet.get_destination_ip(),
+                        ip_packet.get_source_ip(),
+                        Protocol::UDP,
+                        &udp_reply,
+                    );
+                    let _ = tx_clone.send(final_packet).await;
+                }
+                Protocol::Unknown => {}
             }
-            Protocol::UDP => {
-                let udp_packet = UdpPacket::new(ip_packet.payload());
-
-                let udp_reply = UdpPacket::build_reply(
-                    ip_packet.get_destination_ip(),
-                    ip_packet.get_source_ip(),
-                    udp_packet.get_destination_port(),
-                    udp_packet.get_source_port(),
-                    udp_packet.payload(),
-                );
-
-                let final_packet = IPV4Packet::build_ipv4_packet(
-                    ip_packet.get_destination_ip(), // 新源 IP
-                    ip_packet.get_source_ip(),      // 新目的 IP
-                    Protocol::UDP,                  // 协议类型
-                    &udp_reply,                     // 刚做好的 UDP 响应包作为 IP 的 payload
-                );
-
-                // 🔥 修复点：一定要把拼装好的 IP 层数据包写回网卡，否则内核收不到响应
-                tun.write(&final_packet).await?;
-            }
-            Protocol::Unknown => todo!(),
-        }
+        });
     }
 }
