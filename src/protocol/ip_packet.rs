@@ -3,15 +3,15 @@ use std::net::Ipv4Addr;
 use crate::protocol::protocol::{Checksum, Protocol};
 
 #[derive(Debug)]
-pub struct IPV4Packet<'a> {
+pub struct Ipv4Packet<'a> {
     raw_data: &'a [u8],
 }
 
-impl<'a> Checksum for IPV4Packet<'a> {}
+impl<'a> Checksum for Ipv4Packet<'a> {}
 
-impl<'a> IPV4Packet<'a> {
+impl<'a> Ipv4Packet<'a> {
     pub fn new(slice: &'a [u8]) -> Self {
-        IPV4Packet { raw_data: slice }
+        Ipv4Packet { raw_data: slice }
     }
 
     pub fn build_ipv4_packet(

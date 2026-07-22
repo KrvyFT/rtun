@@ -5,9 +5,9 @@ use tokio::sync::mpsc;
 use crate::{
     protocol::{
         icmp_packet::{ICMPPacket, ICMPType},
-        ip_packet::IPV4Packet,
+        ip_packet::Ipv4Packet,
         protocol::Protocol,
-        udp_packet::UdpPacket,
+        udp::udp_packet::UdpPacket,
     },
     tun_device::TUNDevice,
 };
@@ -45,7 +45,7 @@ async fn main() -> io::Result<()> {
 
         let tx_clone = tx.clone();
         tokio::spawn(async move {
-            let ip_packet = IPV4Packet::new(&raw_packet);
+            let ip_packet = Ipv4Packet::new(&raw_packet);
 
             match ip_packet.protocol() {
                 Protocol::ICMP => {
@@ -54,7 +54,7 @@ async fn main() -> io::Result<()> {
                     match icmp_packet.get_type() {
                         ICMPType::EchoRequest => {
                             let reply = ICMPPacket::build_reply(ip_packet.payload());
-                            let final_packet = IPV4Packet::build_ipv4_packet(
+                            let final_packet = Ipv4Packet::build_ipv4_packet(
                                 ip_packet.get_destination_ip(),
                                 ip_packet.get_source_ip(),
                                 Protocol::ICMP,
@@ -74,7 +74,7 @@ async fn main() -> io::Result<()> {
                         udp_packet.get_source_port(),
                         udp_packet.payload(),
                     );
-                    let final_packet = IPV4Packet::build_ipv4_packet(
+                    let final_packet = Ipv4Packet::build_ipv4_packet(
                         ip_packet.get_destination_ip(),
                         ip_packet.get_source_ip(),
                         Protocol::UDP,
