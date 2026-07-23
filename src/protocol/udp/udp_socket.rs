@@ -2,11 +2,12 @@ use std::{io, net::Ipv4Addr};
 
 use tokio::sync::mpsc;
 
-use crate::protocol::udp::{
+use crate::protocol::{
+    ip_packet::Ipv4Packet,
     port_registry::{PortRegistry, UdpPacketMessage},
-    udp_packet::UdpPacket,
+    protocol::Protocol,
+    udp::udp_packet::UdpPacket,
 };
-use crate::protocol::{ip_packet::Ipv4Packet, protocol::Protocol};
 
 pub struct UdpSocket {
     port: u16,
@@ -41,7 +42,7 @@ impl UdpSocket {
         let udp_payload = UdpPacket::build_reply(self.local_ip, dst, self.port, dst_port, buf);
 
         let final_packet =
-            Ipv4Packet::build_ipv4_packet(dst, self.local_ip, Protocol::UDP, &udp_payload);
+            Ipv4Packet::build_ipv4_packet(dst, self.local_ip, Protocol::Udp, &udp_payload);
 
         self.rx_to_tun
             .send(final_packet)
@@ -49,5 +50,11 @@ impl UdpSocket {
             .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "TUN 网卡写入管道已断开"))?;
 
         Ok(())
+    }
+}
+
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        let _ = self.registry.unregister(self.port);
     }
 }

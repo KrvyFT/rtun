@@ -7,11 +7,11 @@ use std::{
 use libc::{IFF_NO_PI, IFF_TUN, TUNSETIFF, c_short, ifreq};
 use tokio::io::unix::AsyncFd;
 
-pub struct TUNDevice {
+pub struct TunDevice {
     async_fd: AsyncFd<File>,
 }
 
-impl TUNDevice {
+impl TunDevice {
     /// 创建并打开一个虚拟网卡
     pub fn new() -> io::Result<Self> {
         let file = OpenOptions::new()
@@ -45,7 +45,7 @@ impl TUNDevice {
         if res < 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(TUNDevice {
+        Ok(TunDevice {
             async_fd: AsyncFd::new(file)?,
         })
     }

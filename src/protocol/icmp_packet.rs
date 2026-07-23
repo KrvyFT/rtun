@@ -1,6 +1,6 @@
-use super::protocol::Checksum;
+use super::protocol::Checksummable;
 
-pub enum ICMPType {
+pub enum IcmpType {
     EchoReply = 0,              // Ping 回应
     DestinationUnreachable = 3, // 目标不可达
     SourceQuench = 4,           // 源抑制
@@ -10,42 +10,42 @@ pub enum ICMPType {
     Unknown = 255,              // 未知协议兜底
 }
 
-impl From<u8> for ICMPType {
+impl From<u8> for IcmpType {
     fn from(value: u8) -> Self {
         match value {
-            0 => ICMPType::EchoReply,
-            3 => ICMPType::DestinationUnreachable,
-            4 => ICMPType::SourceQuench,
-            5 => ICMPType::Redirect,
-            8 => ICMPType::EchoRequest,
-            11 => ICMPType::TimeExceeded,
-            _ => ICMPType::Unknown,
+            0 => IcmpType::EchoReply,
+            3 => IcmpType::DestinationUnreachable,
+            4 => IcmpType::SourceQuench,
+            5 => IcmpType::Redirect,
+            8 => IcmpType::EchoRequest,
+            11 => IcmpType::TimeExceeded,
+            _ => IcmpType::Unknown,
         }
     }
 }
 
-pub struct ICMPPacket<'a> {
+pub struct IcmpPacket<'a> {
     // 借用自 IP 包的 payload 部分
     raw_data: &'a [u8],
 }
 
-impl<'a> Checksum for ICMPPacket<'a> {}
+impl<'a> Checksummable for IcmpPacket<'a> {}
 
-impl<'a> ICMPPacket<'a> {
+impl<'a> IcmpPacket<'a> {
     pub fn new(slice: &'a [u8]) -> Self {
         Self { raw_data: slice }
     }
 
     /// 获取 ICMP 类型 (Type)
     /// 第 0 个字节：8 代表 Ping 请求，0 代表 Ping 回应
-    pub fn get_type(&self) -> ICMPType {
-        ICMPType::from(self.raw_data[0])
+    pub fn msg_type(&self) -> IcmpType {
+        IcmpType::from(self.raw_data[0])
     }
 
     /// 获取 ICMP 子类型 (Code)
     /// Ping 请求通常是 0
     /// Ping 超时（Time Exceeded）通常是 1
-    pub fn get_code(&self) -> u8 {
+    pub fn code(&self) -> u8 {
         self.raw_data[1]
     }
 
@@ -58,7 +58,7 @@ impl<'a> ICMPPacket<'a> {
     pub fn build_reply(request_data: &[u8]) -> Vec<u8> {
         let mut reply = request_data.to_vec();
 
-        reply[0] = ICMPType::EchoReply as u8;
+        reply[0] = IcmpType::EchoReply as u8;
         reply[1] = 0;
 
         reply[2] = 0;

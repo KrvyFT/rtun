@@ -1,20 +1,20 @@
 pub enum Protocol {
-    ICMP = 1,
-    UDP = 17,
+    Icmp = 1,
+    Udp = 17,
     Unknown = 255,
 }
 
 impl From<u8> for Protocol {
     fn from(value: u8) -> Self {
         match value {
-            1 => Protocol::ICMP,
-            17 => Protocol::UDP,
+            1 => Protocol::Icmp,
+            17 => Protocol::Udp,
             _ => Protocol::Unknown,
         }
     }
 }
 
-pub trait Checksum {
+pub trait Checksummable {
     fn calc_checksum(data: &[u8]) -> u16 {
         let mut sum = 0u32;
         let mut i = 0;

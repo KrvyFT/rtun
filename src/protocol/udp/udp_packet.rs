@@ -1,31 +1,31 @@
 use std::net::Ipv4Addr;
 
-use crate::protocol::protocol::Checksum;
+use crate::protocol::protocol::Checksummable;
 
 pub struct UdpPacket<'a> {
     raw_data: &'a [u8],
 }
 
-impl<'a> Checksum for UdpPacket<'a> {}
+impl<'a> Checksummable for UdpPacket<'a> {}
 
 impl<'a> UdpPacket<'a> {
     pub fn new(slice: &'a [u8]) -> Self {
         Self { raw_data: slice }
     }
 
-    pub fn get_source_port(&self) -> u16 {
+    pub fn source_port(&self) -> u16 {
         ((self.raw_data[0] as u16) << 8) | (self.raw_data[1] as u16)
     }
 
-    pub fn get_destination_port(&self) -> u16 {
+    pub fn destination_port(&self) -> u16 {
         ((self.raw_data[2] as u16) << 8) | (self.raw_data[3] as u16)
     }
 
-    pub fn get_length(&self) -> u16 {
+    pub fn length(&self) -> u16 {
         ((self.raw_data[4] as u16) << 8) | (self.raw_data[5] as u16)
     }
 
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         ((self.raw_data[6] as u16) << 8) | (self.raw_data[7] as u16)
     }
 

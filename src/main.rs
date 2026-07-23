@@ -4,12 +4,13 @@ use tokio::sync::mpsc;
 
 use crate::{
     protocol::{
-        icmp_packet::{ICMPPacket, ICMPType},
+        icmp_packet::{IcmpPacket, IcmpType},
         ip_packet::Ipv4Packet,
+        port_registry::PortRegistry,
         protocol::Protocol,
         udp::udp_packet::UdpPacket,
     },
-    tun_device::TUNDevice,
+    tun_device::TunDevice,
 };
 
 mod protocol;
@@ -17,7 +18,7 @@ mod tun_device;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let tun = Arc::new(TUNDevice::new().expect("Failed to create TUN device"));
+    let tun = Arc::new(TunDevice::new().expect("Failed to create TUN device"));
     println!("TUN device created successfully");
 
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
@@ -31,6 +32,7 @@ async fn main() -> io::Result<()> {
     });
 
     let mut buf = [0u8; 1500];
+    let registry = Arc::new(PortRegistry::new());
     loop {
         let bytes_read = tun.read(&mut buf).await?;
         let raw_packet = buf[..bytes_read].to_vec();
@@ -44,20 +46,21 @@ async fn main() -> io::Result<()> {
         }
 
         let tx_clone = tx.clone();
+        let registry = Arc::clone(&registry);
         tokio::spawn(async move {
             let ip_packet = Ipv4Packet::new(&raw_packet);
 
             match ip_packet.protocol() {
-                Protocol::ICMP => {
-                    let icmp_packet = ICMPPacket::new(ip_packet.payload());
+                Protocol::Icmp => {
+                    let icmp_packet = IcmpPacket::new(ip_packet.payload());
 
-                    match icmp_packet.get_type() {
-                        ICMPType::EchoRequest => {
-                            let reply = ICMPPacket::build_reply(ip_packet.payload());
+                    match icmp_packet.msg_type() {
+                        IcmpType::EchoRequest => {
+                            let reply = IcmpPacket::build_reply(ip_packet.payload());
                             let final_packet = Ipv4Packet::build_ipv4_packet(
-                                ip_packet.get_destination_ip(),
-                                ip_packet.get_source_ip(),
-                                Protocol::ICMP,
+                                ip_packet.destination_ip(),
+                                ip_packet.source_ip(),
+                                Protocol::Icmp,
                                 &reply,
                             );
                             let _ = tx_clone.send(final_packet).await;
@@ -65,22 +68,22 @@ async fn main() -> io::Result<()> {
                         _ => {}
                     }
                 }
-                Protocol::UDP => {
+                Protocol::Udp => {
                     let udp_packet = UdpPacket::new(ip_packet.payload());
-                    let udp_reply = UdpPacket::build_reply(
-                        ip_packet.get_destination_ip(),
-                        ip_packet.get_source_ip(),
-                        udp_packet.get_destination_port(),
-                        udp_packet.get_source_port(),
-                        udp_packet.payload(),
-                    );
-                    let final_packet = Ipv4Packet::build_ipv4_packet(
-                        ip_packet.get_destination_ip(),
-                        ip_packet.get_source_ip(),
-                        Protocol::UDP,
-                        &udp_reply,
-                    );
-                    let _ = tx_clone.send(final_packet).await;
+                    let dest_port = udp_packet.destination_port();
+
+                    if let Some(tx) = registry.get(dest_port) {
+                        let _ = tx.try_send((
+                            ip_packet.source_ip(),
+                            udp_packet.source_port(),
+                            udp_packet.payload().to_vec(),
+                        ));
+                    } else {
+                        println!(
+                            "Receive UDP packets sent to unbound port {} and discard them automatically",
+                            dest_port
+                        );
+                    }
                 }
                 Protocol::Unknown => {}
             }
